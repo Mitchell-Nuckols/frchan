@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -41,6 +42,23 @@ func main() {
 		return
 	}
 
+	ticker := time.NewTicker(time.Minute * 3)
+	quit := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				err = dg.UpdateStreamingStatus(0, "for Team 6657", "http://github.com/team6657/frchan")
+				if err != nil {
+					log.Println("Error setting bot status:", err)
+				}
+			case <-quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
 	log.Println("Bot now running. Press CTRL+C to exit.")
 
 	sc := make(chan os.Signal, 1)
@@ -48,6 +66,7 @@ func main() {
 	<-sc
 
 	dg.Close()
+	close(quit)
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -66,14 +85,237 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		var emb *discordgo.MessageEmbed
 
 		switch cmd {
+		case "help":
+			embfields := []*discordgo.MessageEmbedField{
+				&discordgo.MessageEmbedField{
+					Name:   "help",
+					Value:  "```md\n< description：>\n\tDisplays this page\n< usage：>\n\t~!help\n```",
+					Inline: false,
+				},
+				&discordgo.MessageEmbedField{
+					Name:   "team",
+					Value:  "```md\n< description：>\n\tDisplays FRC team info\n< usage：>\n\t~!team <team #>\n```",
+					Inline: false,
+				},
+				&discordgo.MessageEmbedField{
+					Name:   "awards",
+					Value:  "```md\n< description：>\n\tDisplays FRC team awards in competitions over the years\n< usage：>\n\t~!awards <team #>\n```",
+					Inline: false,
+				},
+				&discordgo.MessageEmbedField{
+					Name:   "events",
+					Value:  "```md\n< description：>\n\tDisplays FRC team rankings in events\n< usage：>\n\t~!events <team #> [event #]\n```",
+					Inline: false,
+				},
+			}
+
+			emb = &discordgo.MessageEmbed{
+				Author: &discordgo.MessageEmbedAuthor{
+					Name: "FRChan Help Guide",
+					URL:  "http://github.com/team6657/frchan",
+				},
+				Description: "List of commands for FRChan:\n",
+				Fields:      embfields,
+				Color:       14490723,
+			}
 		case "team":
 			emb = formatTeamInfo(getTeamInfo(params[0]))
 		case "awards":
 			emb = formatTeamAwards(params[0], getTeamAwards(params[0]))
+		case "events":
+			emb = formatTeamEventStatus(params)
 		}
 
-		s.ChannelMessageSendEmbed(m.ChannelID, emb)
+		_, err := s.ChannelMessageSendEmbed(m.ChannelID, emb)
+		if err != nil {
+			log.Println("Error sending message:", err)
+			return
+		}
 	}
+}
+
+func formatTeamEventStatus(args []string) *discordgo.MessageEmbed {
+	teamkey := args[0]
+
+	team := getTeamInfo(teamkey)
+	events := getTeamEventsSimple(teamkey)
+
+	var formatted string
+	var emb *discordgo.MessageEmbed
+
+	authstr := team.Nickname + " (" + strconv.Itoa(team.TeamNumber) + ")"
+
+	if len(authstr) > 40 {
+		authstr = team.Name + " (" + strconv.Itoa(team.TeamNumber) + ")"
+		if len(authstr) > 40 {
+			authstr = "Team " + strconv.Itoa(team.TeamNumber)
+		}
+	}
+
+	if len(args) > 1 {
+		if en := args[1]; en != "" {
+			n, err := strconv.Atoi(en)
+			if err != nil {
+				log.Println("Error converting string to int:", err)
+			}
+
+			e := events[n]
+			tei := getTeamEventStatus(teamkey, e.Key)
+
+			var playoffstr string
+
+			if tei.Playoff == (TBAPlayoff{}) {
+				playoffstr = "Team did not make it to playoffs"
+			} else {
+				playoffstr = "Level: " + tei.Playoff.Level +
+					"\nW/L/T:\t" + strconv.Itoa(tei.Playoff.Record.Wins) + "\t" + strconv.Itoa(tei.Playoff.Record.Losses) + "\t" + strconv.Itoa(tei.Playoff.Record.Ties)
+			}
+
+			embfields := []*discordgo.MessageEmbedField{
+				&discordgo.MessageEmbedField{
+					Name:   "Event",
+					Value:  e.Name + "(" + strconv.Itoa(e.Year) + ")",
+					Inline: true,
+				},
+				&discordgo.MessageEmbedField{
+					Name:   "Location",
+					Value:  e.City + ", " + e.StateProv + " " + e.Country,
+					Inline: true,
+				},
+				&discordgo.MessageEmbedField{
+					Name:   "Date",
+					Value:  e.StartDate + " - " + e.EndDate,
+					Inline: true,
+				},
+				&discordgo.MessageEmbedField{
+					Name: "Qualifiers",
+					Value: strconv.Itoa(tei.Qual.Ranking.Rank) + "/" + strconv.Itoa(tei.Qual.NumTeams) +
+						"\nW-L-T:\t" + strconv.Itoa(tei.Qual.Ranking.Record.Wins) + "-" + strconv.Itoa(tei.Qual.Ranking.Record.Losses) + "-" + strconv.Itoa(tei.Qual.Ranking.Record.Ties),
+					Inline: false,
+				},
+				&discordgo.MessageEmbedField{
+					Name:   "Playoffs",
+					Value:  playoffstr,
+					Inline: false,
+				},
+			}
+
+			emb = &discordgo.MessageEmbed{
+				Author: &discordgo.MessageEmbedAuthor{
+					Name: authstr,
+					URL:  team.Website,
+				},
+				Description: team.Name + "\nNick: " + team.Nickname + "\nTeam event info:\n",
+				Fields:      embfields,
+				Color:       14490723,
+				Footer: &discordgo.MessageEmbedFooter{
+					Text: "Info provided by The Blue Alliance",
+				},
+			}
+		}
+	} else {
+		for i, e := range events {
+			formatted +=
+				"\n```md\n" + strconv.Itoa(i) + ". " + e.Name +
+					" <" + strconv.Itoa(e.Year) + ">\n\t" +
+					e.City + ", " +
+					e.StateProv + " " +
+					e.Country +
+					"```"
+		}
+
+		emb = &discordgo.MessageEmbed{
+			Author: &discordgo.MessageEmbedAuthor{
+				Name: authstr,
+				URL:  team.Website,
+			},
+			Description: team.Name + "\nNick: " + team.Nickname + "\n" + formatted,
+			Color:       14490723,
+			Footer: &discordgo.MessageEmbedFooter{
+				Text: "Info provided by The Blue Alliance",
+			},
+		}
+	}
+
+	return emb
+}
+
+func getTeamEventStatus(teamkey, eventkey string) TBATeamEventStatus {
+	var info TBATeamEventStatus
+
+	req, err := http.NewRequest("GET", "http://www.thebluealliance.com/api/v3/team/frc"+teamkey+"/event/"+eventkey+"/status", nil)
+	if err != nil {
+		log.Println("Failed event info request:", err)
+		return TBATeamEventStatus{}
+	}
+
+	req.Header.Set("X-TBA-Auth-Key", TBAToken)
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Println("Failed event info request:", err)
+		return TBATeamEventStatus{}
+	}
+
+	err = json.NewDecoder(res.Body).Decode(&info)
+	if err != nil {
+		log.Println("Failed event info request:", err)
+		return TBATeamEventStatus{}
+	}
+
+	return info
+}
+
+func getEventRankings(eventkey string) TBAEventRankings {
+	var info TBAEventRankings
+
+	req, err := http.NewRequest("GET", "http://www.thebluealliance.com/api/v3/event/"+eventkey+"/rankings", nil)
+	if err != nil {
+		log.Println("Failed event info request:", err)
+		return TBAEventRankings{}
+	}
+
+	req.Header.Set("X-TBA-Auth-Key", TBAToken)
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Println("Failed event info request:", err)
+		return TBAEventRankings{}
+	}
+
+	err = json.NewDecoder(res.Body).Decode(&info)
+	if err != nil {
+		log.Println("Failed event info request:", err)
+		return TBAEventRankings{}
+	}
+
+	return info
+}
+
+func getTeamEventsSimple(teamkey string) TBATeamEventsSimple {
+	var info TBATeamEventsSimple
+
+	req, err := http.NewRequest("GET", "http://www.thebluealliance.com/api/v3/team/frc"+teamkey+"/events/simple", nil)
+	if err != nil {
+		log.Println("Failed team info request:", err)
+		return TBATeamEventsSimple{}
+	}
+
+	req.Header.Set("X-TBA-Auth-Key", TBAToken)
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Println("Failed team info request:", err)
+		return TBATeamEventsSimple{}
+	}
+
+	err = json.NewDecoder(res.Body).Decode(&info)
+	if err != nil {
+		log.Println("Failed team info request:", err)
+		return TBATeamEventsSimple{}
+	}
+
+	return info
 }
 
 func formatTeamAwards(teamkey string, info TBATeamAwards) *discordgo.MessageEmbed {
@@ -102,6 +344,7 @@ func formatTeamAwards(teamkey string, info TBATeamAwards) *discordgo.MessageEmbe
 			URL:  teaminfo.Website,
 		},
 		Description: formatted,
+		Color:       14490723,
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: "Info provided by The Blue Alliance",
 		},
@@ -172,6 +415,7 @@ func formatTeamInfo(info TBATeam) *discordgo.MessageEmbed {
 		},
 		Description: "\nInfo for team " + info.Key + ":\n",
 		Fields:      embfields,
+		Color:       14490723,
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: "Info provided by The Blue Alliance",
 		},
