@@ -182,7 +182,7 @@ func formatTeamEventStatus(args []string) (*discordgo.MessageEmbed, bool) {
 					playoffstr = "Team did not make it to playoffs"
 				} else {
 					playoffstr = "Level: " + tei.Playoff.Level +
-						"\nW/L/T:\t" + strconv.Itoa(tei.Playoff.Record.Wins) + "\t" + strconv.Itoa(tei.Playoff.Record.Losses) + "\t" + strconv.Itoa(tei.Playoff.Record.Ties)
+						"\nW-L-T:\t" + strconv.Itoa(tei.Playoff.Record.Wins) + "-" + strconv.Itoa(tei.Playoff.Record.Losses) + "-" + strconv.Itoa(tei.Playoff.Record.Ties)
 				}
 
 				embfields := []*discordgo.MessageEmbedField{
