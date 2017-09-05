@@ -91,22 +91,22 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			embfields := []*discordgo.MessageEmbedField{
 				&discordgo.MessageEmbedField{
 					Name:   "help",
-					Value:  "```md\n< description：>\n\tDisplays this page\n< usage：>\n\t~!help\n```",
+					Value:  "```md\n# Displays this page\n< usage：>\n\t~!help\n```",
 					Inline: false,
 				},
 				&discordgo.MessageEmbedField{
 					Name:   "team",
-					Value:  "```md\n< description：>\n\tDisplays FRC team info\n< usage：>\n\t~!team <team #>\n```",
+					Value:  "```md\n# Displays FRC team info\n< usage：>\n\t~!team <team #>\n```",
 					Inline: false,
 				},
 				&discordgo.MessageEmbedField{
 					Name:   "awards",
-					Value:  "```md\n< description：>\n\tDisplays FRC team awards in competitions over the years\n< usage：>\n\t~!awards <team #>\n```",
+					Value:  "```md\n# Displays FRC team awards in competitions over the years\n< usage：>\n\t~!awards <team #>\n```",
 					Inline: false,
 				},
 				&discordgo.MessageEmbedField{
 					Name:   "events",
-					Value:  "```md\n< description：>\n\tDisplays FRC team rankings in events\n< usage：>\n\t~!events <team #> [event #]\n```",
+					Value:  "```md\n# Displays FRC team rankings in events\n< usage：>\n\t~!events <team #> [event #]\n```",
 					Inline: false,
 				},
 			}
@@ -231,8 +231,8 @@ func formatTeamEventStatus(args []string) (*discordgo.MessageEmbed, bool) {
 	} else {
 		for i, e := range events {
 			formatted +=
-				"\n```md\n" + strconv.Itoa(i) + ". " + e.Name +
-					" <" + strconv.Itoa(e.Year) + ">\n\t" +
+				"\n```md\n" + strconv.Itoa(i) + ". <" + e.Name +
+					" (" + strconv.Itoa(e.Year) + ")>\n\t" +
 					e.City + ", " +
 					e.StateProv + " " +
 					e.Country +
