@@ -120,6 +120,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				Fields:      embfields,
 				Color:       14490723,
 			}
+
+			ok = true
 		case "team":
 			emb, ok = formatTeamInfo(getTeamInfo(params[0]))
 		case "awards":
